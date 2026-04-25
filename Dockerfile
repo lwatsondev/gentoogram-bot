@@ -39,7 +39,7 @@ ENV META_VERSION="${META_VERSION}" \
     SETTINGS_FILES_FOR_DYNACONF='["/app/gentoogram/resources/config/default.toml", "*.toml"]' \
     INSTANCE_FOR_DYNACONF="gentoogram.__main__.config"
 
-ADD . .
+COPY . .
 RUN ln -s /app/docker/rootfs/* /
 
 RUN --mount=type=cache,target=${UV_CACHE_DIR} \
