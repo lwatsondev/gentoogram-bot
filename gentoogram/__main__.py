@@ -18,9 +18,10 @@ import re
 import secrets
 from typing import TYPE_CHECKING
 
-import httpx
 import sentry_sdk
 from dynaconf import ValidationError
+from niquests import AsyncSession
+from niquests.exceptions import RequestException
 from telegram.constants import ChatAction, ParseMode
 from telegram.error import NetworkError, TelegramError
 from telegram.ext import (
@@ -46,7 +47,15 @@ REGEX_FLAGS = re.UNICODE | re.IGNORECASE | re.DOTALL
 def sentry_before_send(event, hint):
     if "exc_info" in hint:
         _, exc_value, _ = hint["exc_info"]
-        if isinstance(exc_value, TelegramError | NetworkError | ValidationError):
+        if isinstance(
+            exc_value,
+            ConnectionError
+            | NetworkError
+            | RequestException
+            | TelegramError
+            | TimeoutError
+            | ValidationError,
+        ):
             return None
 
     return event
@@ -129,12 +138,12 @@ async def is_spammer(user: User) -> bool:
         return False
 
     try:
-        async with httpx.AsyncClient(timeout=5) as client:
+        async with AsyncSession() as client:
             response = await client.get(
-                f"https://api.cas.chat/check?user_id={user.id}", timeout=5
+                "https://api.cas.chat/check", params={"user_id": user.id}, timeout=5
             )
             check_result = response.json()
-    except (httpx.HTTPError, httpx.TimeoutException) as exc:
+    except RequestException as exc:
         logger.warning(exc)
         return False
 
@@ -149,7 +158,57 @@ async def is_spammer(user: User) -> bool:
     return False
 
 
-async def chat_filter(update: Update, context: ContextTypes.DEFAULT_TYPE):  # noqa: C901, ARG001, PLR0912
+async def _filter_username(user, username, message, chat, log_data, _filters) -> None:
+    for pattern in _filters.get("usernames"):
+        if re.search(pattern, user.full_name, REGEX_FLAGS) or re.search(
+            pattern, username, REGEX_FLAGS
+        ):
+            log_data.update({"regex": pattern})
+            logger.info(f"Username filter match: {log_data}")
+
+            if await chat.ban_member(user.id):
+                logger.info(f"Banned {user.id}")
+            else:
+                logger.info(f"Failed to ban {user.id}")
+
+            if not await message.delete():
+                logger.warning(f"Failed to delete message {message.id}")
+
+            break
+
+
+async def _filter_new_member(user, message, chat) -> None:
+    if await is_spammer(user):
+        if await chat.ban_member(user.id):
+            logger.info(f"[CAS] Banned {user.id}")
+        else:
+            logger.warning(f"[CAS] Failed to ban {user.id}")
+
+        if not await message.delete():
+            logger.warning(f"[CAS] Failed to delete message {message.id}")
+
+
+async def _filter_message(message, log_data, _filters) -> None:
+    if not message.text:
+        return
+
+    for pattern in _filters.get("messages"):
+        if re.search(pattern, message.text, REGEX_FLAGS):
+            log_data.update(
+                {
+                    "message": {"id": message.id, "text": message.text},
+                    "regex": pattern,
+                }
+            )
+            logger.info(f"Message filter match: {log_data}")
+            if await message.delete():
+                logger.info(f"Deleted message {message.id}")
+            else:
+                logger.warning(f"Failed to delete message {message.id}")
+            break
+
+
+async def chat_filter(update: Update, context: ContextTypes.DEFAULT_TYPE):  # noqa: ARG001
     logger.debug(f"{update}")
 
     message = update.effective_message
@@ -173,51 +232,13 @@ async def chat_filter(update: Update, context: ContextTypes.DEFAULT_TYPE):  # no
     }
 
     _filters = config.get("filters")
-    for pattern in _filters.get("usernames"):
-        if re.search(pattern, user.full_name, REGEX_FLAGS) or re.search(
-            pattern, username, REGEX_FLAGS
-        ):
-            log_data.update({"regex": pattern})
-            logger.info(f"Username filter match: {log_data}")
-
-            if await chat.ban_member(user.id):
-                logger.info(f"Banned {user.id}")
-            else:
-                logger.info(f"Failed to ban {user.id}")
-
-            if not await message.delete():
-                logger.warning(f"Failed to delete message {message.id}")
-
-            break
+    await _filter_username(user, username, message, chat, log_data, _filters)
 
     if message.new_chat_members:
-        if await is_spammer(user):
-            if await chat.ban_member(user.id):
-                logger.info(f"[CAS] Banned {user.id}")
-            else:
-                logger.warning(f"[CAS] Failed to ban {user.id}")
-
-            if not await message.delete():
-                logger.warning(f"[CAS] Failed to delete message {message.id}")
+        await _filter_new_member(user, message, chat)
         return
 
-    if not message.text:
-        return
-
-    for pattern in _filters.get("messages"):
-        if re.search(pattern, message.text, REGEX_FLAGS):
-            log_data.update(
-                {
-                    "message": {"id": message.id, "text": message.text},
-                    "regex": pattern,
-                }
-            )
-            logger.info(f"Message filter match: {log_data}")
-            if await message.delete():
-                logger.info(f"Deleted message {message.id}")
-            else:
-                logger.warning(f"Failed to delete message {message.id}")
-            break
+    await _filter_message(message, log_data, _filters)
 
 
 if __name__ == "__main__":
