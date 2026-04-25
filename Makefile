@@ -1,4 +1,6 @@
-.PHONY: setup lint run clean
+.PHONY: all setup lint run clean
+
+all: setup lint run
 
 TTY_FLAG := $(shell [ -t 0 ] || echo "-T")
 
