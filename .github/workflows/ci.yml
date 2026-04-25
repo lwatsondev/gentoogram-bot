@@ -12,12 +12,6 @@ concurrency:
 jobs:
   lint:
     uses: "./.github/workflows/lint.yml"
-  # PRs only: release already builds on push events, so this avoids a double build
-  build:
-    needs: "lint"
-    if: "github.event_name == 'pull_request'"
-    uses: "./.github/workflows/build.yml"
   release:
     needs: "lint"
-    if: "github.event_name != 'pull_request'"
     uses: "./.github/workflows/release.yml"
