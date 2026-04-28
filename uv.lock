@@ -168,7 +168,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "dynaconf", specifier = ">=3.2.10" },
-    { name = "niquests", extras = ["speedups"], specifier = ">=3.0.0" },
+    { name = "niquests", extras = ["speedups"], specifier = ">=3.18.7" },
     { name = "python-telegram-bot", extras = ["webhooks"], specifier = ">=22.7" },
     { name = "sentry-sdk", specifier = ">=2.27.0" },
 ]
