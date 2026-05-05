@@ -10,7 +10,7 @@ dependencies = [
     "dynaconf>=3.2.10",
     "niquests[speedups]>=3.18.7",
     "python-telegram-bot[webhooks]>=22.7",
-    "sentry-sdk>=2.27.0",
+    "sentry-sdk>=2.59.0",
 ]
 
 [dependency-groups]
