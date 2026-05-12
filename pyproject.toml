@@ -16,7 +16,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "hadolint-py>=2.14.0.1",
-    "prek>=0.3.12",
+    "prek>=0.3.13",
     "ruff>=0.15.12",
     "shellcheck-py>=0.10.0.1",
     "yamllint>=1.37.1",
