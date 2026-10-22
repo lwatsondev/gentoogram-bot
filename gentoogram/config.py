@@ -80,7 +80,6 @@ config.validators.register(
     )
     & Validator(
         "webhook.listen",
-        len_min=1,
         is_type_of=str,
         default="0.0.0.0",  # noqa: S104
         apply_default_on_none=True,
